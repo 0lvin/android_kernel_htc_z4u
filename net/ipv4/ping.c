@@ -168,8 +168,35 @@ static struct sock *ping_v4_lookup(struct net *net, __be32 saddr, __be32 daddr,
 		pr_debug("iterate\n");
 		if (isk->inet_num != ident)
 			continue;
-		if (isk->inet_rcv_saddr && isk->inet_rcv_saddr != daddr)
+
+		if (skb->protocol == htons(ETH_P_IP) &&
+		    sk->sk_family == AF_INET) {
+			pr_debug("found: %p: num=%d, daddr=%pI4, dif=%d\n", sk,
+				 (int) isk->inet_num, &isk->inet_rcv_saddr,
+				 sk->sk_bound_dev_if);
+
+			if (isk->inet_rcv_saddr &&
+			    isk->inet_rcv_saddr != ip_hdr(skb)->daddr)
+				continue;
+#if IS_ENABLED(CONFIG_IPV6)
+		} else if (skb->protocol == htons(ETH_P_IPV6) &&
+			   sk->sk_family == AF_INET6) {
+			struct ipv6_pinfo *np = inet6_sk(sk);
+
+			pr_debug("found: %p: num=%d, daddr=%pI6c, dif=%d\n", sk,
+				 (int) isk->inet_num,
+				 &inet6_sk(sk)->rcv_saddr,
+				 sk->sk_bound_dev_if);
+
+			if (!ipv6_addr_any(&np->rcv_saddr) &&
+			    !ipv6_addr_equal(&np->rcv_saddr,
+					     &ipv6_hdr(skb)->daddr))
+				continue;
+#endif
+		} else {
 			continue;
+		}
+
 		if (sk->sk_bound_dev_if && sk->sk_bound_dev_if != dif)
 			continue;
 
